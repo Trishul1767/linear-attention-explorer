@@ -155,60 +155,50 @@ def causal_linear_attention_steps(Q, K, V):
 # STREAMLIT UI
 # =========================================================================
 
-st.title("🔗 Linear Attention Explorer")
-st.caption(
-    "DataForge 2026 — Pathway Track · Educational demo built with "
-    "Python, Streamlit, NumPy & Plotly (no ML training, no PyTorch/TF/JAX)."
+st.title("Linear Attention Explorer")
+st.write(
+    "See why comparing every token with every other token becomes "
+    "expensive — and how state-based attention can change the computation."
 )
 
-with st.sidebar:
-    st.header("About this app")
+with st.expander("How to use this"):
     st.markdown(
         """
-        This app teaches the **core idea** behind linear-attention-style
-        computation and connects it — conceptually only — to Pathway's
-        **Dragon Hatchling (BDH / BDH-CQ)**.
-
-        **What this app is NOT:**
-        - Not an implementation of BDH/BDH-CQ
-        - Not a trained neural network
-        - Not a runtime/GPU benchmark
-
-        Walk through the tabs in order for the intended learning path.
+        1. Start with **Big Picture**
+        2. Try increasing the sequence length
+        3. Open **See It Step by Step**
+        4. Watch the state update, token by token
+        5. See how this connects to BDH
         """
     )
-    st.divider()
-    st.caption("Fixed random seed = 42 → all toy math is fully reproducible.")
+
+with st.sidebar:
+    st.write(
+        "Explore how attention behaves as sequences get longer, then see "
+        "a small step-by-step toy example."
+    )
+    st.caption("Seed fixed at 42, so results are reproducible.")
 
 tab1, tab2, tab3, tab4 = st.tabs(
-    ["1. The Big Picture", "2. See the Difference", "3. Connecting to BDH", "4. Trade-offs"]
+    ["Big Picture", "See It Step by Step", "Connecting to BDH", "Trade-offs"]
 )
 
 # -------------------------------------------------------------------------
 # TAB 1 — The Big Picture
 # -------------------------------------------------------------------------
 with tab1:
-    st.header("Why does standard attention get expensive?")
-
-    st.markdown(
-        """
-        In standard self-attention, three matrices are computed from each
-        token's embedding: a **Query (Q)**, a **Key (K)**, and a **Value (V)**.
-
-        To decide how much each token should "attend to" every other
-        token, we compute **Q Kᵀ**. This single operation compares
-        *every* query against *every* key — for a sequence of length
-        **N**, that's **N × N** pairwise comparisons.
-
-        A sequence of just 10,000 tokens therefore produces
-        **10,000 × 10,000 = 100,000,000** pairwise interactions — and
-        that count grows *quadratically*: doubling N roughly
-        **quadruples** the work.
-        """
+    st.write(
+        "Imagine 100 people in a room, and everyone has to compare "
+        "themselves with everyone else. The number of comparisons grows "
+        "fast — really fast."
+    )
+    st.write(
+        "With **N** tokens, standard attention does something similar: "
+        "it looks at an **N × N** set of token-to-token interactions."
     )
 
     n_val = st.slider(
-        "Sequence length N", min_value=100, max_value=10000, value=2000, step=100
+        "Try increasing the sequence length (N):", min_value=100, max_value=10000, value=2000, step=100
     )
 
     n_range = np.arange(100, 10001, 100)
@@ -216,7 +206,7 @@ with tab1:
 
     fig = go.Figure()
     fig.add_trace(
-        go.Scatter(x=n_range, y=pairwise, mode="lines", name="N² pairwise interactions",
+        go.Scatter(x=n_range, y=pairwise, mode="lines", name="N² interactions",
                    line=dict(width=3))
     )
     fig.add_trace(
@@ -226,30 +216,38 @@ with tab1:
         )
     )
     fig.update_layout(
-        title="Pairwise interactions vs. sequence length (theoretical, not measured runtime)",
         xaxis_title="N (sequence length)",
-        yaxis_title="N² pairwise interactions",
-        height=450,
+        yaxis_title="N² interactions",
+        height=420,
+        margin=dict(t=20),
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    st.metric(f"Pairwise interactions at N = {n_val:,}", f"{n_val ** 2:,}")
-
-    st.info(
-        "📌 This chart shows a **theoretical calculation** of N² — it does "
-        "NOT measure actual GPU runtime, wall-clock time, or memory usage "
-        "on real hardware. Real performance depends on hardware, "
-        "implementation, and many other factors."
+    st.caption(
+        f"At N = {n_val:,}, that's {n_val ** 2:,} interactions. "
+        "This is theoretical scaling, not a measurement of real GPU runtime."
     )
+
+    with st.expander("Want the math?"):
+        st.markdown(
+            """
+            Each token gets three vectors: a **Query (Q)**, a **Key (K)**,
+            and a **Value (V)**.
+
+            To find out how much each token should "attend to" every
+            other token, we compute **Q Kᵀ**, scaled by `1/√d` (where
+            `d` is the embedding size). This compares *every* query
+            against *every* key — for N tokens, that's N × N comparisons,
+            which is exactly the quadratic growth shown in the chart above.
+            """
+        )
 
 # -------------------------------------------------------------------------
 # TAB 2 — See the Difference
 # -------------------------------------------------------------------------
 with tab2:
-    st.header("Standard attention vs. linear-attention-style state accumulation")
-
     sentence = st.text_input(
-        "Enter a short sentence (5–8 words work best):",
+        "Try your own sentence (5–8 words work best):",
         value="AI research moves very fast",
     )
     tokens = sentence.strip().split()
@@ -259,52 +257,27 @@ with tab2:
         st.stop()
     if len(tokens) > 8:
         tokens = tokens[:8]
-        st.caption("ℹ️ Sentence truncated to the first 8 tokens for this toy demo.")
+        st.caption("Sentence trimmed to the first 8 tokens for this toy demo.")
 
     Q, K, V = make_toy_qkv(tokens)
     attn, std_out = standard_attention(Q, K, V)
 
-    st.subheader("① Standard attention: the N × N matrix")
-    st.markdown(
-        "Every token (row) attends to every other token (column). "
-        "This is the **attention matrix** — the thing that must be "
-        "explicitly built and stored in standard attention."
+    st.write(
+        "Here, every token can interact with every other token. The "
+        "square below shows those interactions."
     )
     fig_heat = go.Figure(
         data=go.Heatmap(z=attn, x=tokens, y=tokens, colorscale="Blues", colorbar=dict(title="weight"))
     )
-    fig_heat.update_layout(
-        title=f"Attention matrix ({len(tokens)} × {len(tokens)} = {len(tokens)**2} stored numbers)",
-        height=420,
-    )
+    fig_heat.update_layout(height=400, margin=dict(t=10))
     st.plotly_chart(fig_heat, use_container_width=True)
-    st.caption(
-        f"This toy example stores {len(tokens)**2} numbers. "
-        f"If this sentence had 10,000 tokens instead of {len(tokens)}, "
-        f"the SAME idea would require 100,000,000 stored numbers — "
-        f"which is exactly why we never build that matrix in this app."
-    )
 
     st.divider()
 
-    st.subheader("② Linear-attention-style: accumulating a state, token by token")
-    st.markdown(
-        """
-        **🧪 Educational toy demonstration — this is *not* an
-        implementation of Pathway's BDH.**
-
-        Instead of comparing every pair of tokens, we walk through the
-        sentence **once**, left to right, and keep updating a small,
-        fixed-size **state matrix**. This works because matrix
-        multiplication is associative:
-
-        `(φ(Q) φ(K)ᵀ) V`  (needs an N×N matrix)  is mathematically equal to
-        `φ(Q) (φ(K)ᵀ V)`  (only ever needs a small d×d matrix)
-
-        where **φ** ("phi") is a simple feature map (see sidebar/code for
-        the exact formula). The state below *is* that small d×d matrix,
-        built up one token at a time.
-        """
+    st.write(
+        "Now watch a different idea: instead of comparing every pair, "
+        "each token folds its information into a small **state** as we "
+        "move through the sentence, one token at a time."
     )
 
     steps = causal_linear_attention_steps(Q, K, V)
@@ -314,145 +287,129 @@ with tab2:
 
     col1, col2 = st.columns([1, 2])
     with col1:
-        st.metric("Current token", f"'{tokens[step_idx]}'")
-        st.metric("State size (fixed)", f"{Q.shape[1]} × {Q.shape[1]}")
-        st.metric("Tokens processed so far", step_idx + 1)
-        st.write("**Sequence so far:**")
-        st.write(" → ".join(tokens[: step_idx + 1]))
+        st.write(f"**Current token:** '{tokens[step_idx]}'")
+        st.write(f"**State size:** {Q.shape[1]} × {Q.shape[1]} (fixed)")
+        st.write("**So far:** " + " → ".join(tokens[: step_idx + 1]))
     with col2:
         state = steps[step_idx]["state"]
         fig_state = go.Figure(data=go.Heatmap(z=state, colorscale="Oranges"))
-        fig_state.update_layout(
-            title=f"Accumulated state after token {step_idx + 1} ('{tokens[step_idx]}')",
-            height=420,
-        )
+        fig_state.update_layout(height=380, margin=dict(t=10))
         st.plotly_chart(fig_state, use_container_width=True)
 
-    st.success(
-        "💡 **The 'aha' moment:** As you move the slider, the state's "
-        "*values* keep changing — but its *size* never does. Compare that "
-        "to the N×N matrix above, which would grow every time we add a "
-        "new token. That's the core reorganization idea behind "
-        "linear-attention-style computation."
+    st.write(
+        "Notice: the state's *values* keep changing, but its *size* "
+        "never does — unlike the square above, which grows with every "
+        "extra token."
     )
+
+    with st.expander("Want to see what's happening mathematically?"):
+        st.markdown(
+            """
+            This is a small educational toy demo — not an implementation
+            of Pathway's BDH.
+
+            Each token's key and value are folded into a running state
+            matrix `S`, and a running total `Z` keeps everything on a
+            sensible scale:
+
+            `S = S + φ(k) ⊗ v`   and   `Z = Z + φ(k)`
+
+            where **φ** ("phi") is a simple feature map that keeps values
+            positive. This works because matrix multiplication is
+            associative — `(φ(Q) φ(K)ᵀ) V` (needs an N×N matrix) equals
+            `φ(Q) (φ(K)ᵀ V)` (only ever needs a small d×d matrix). The
+            state above *is* that small matrix, built up one token at a time.
+            """
+        )
 
 # -------------------------------------------------------------------------
 # TAB 3 — Connecting to BDH
 # -------------------------------------------------------------------------
 with tab3:
-    st.header("Conceptual connection to Pathway's Dragon Hatchling (BDH / BDH-CQ)")
-
-    st.warning(
-        "⚠️ The connections below are **conceptual analogies** meant to "
-        "build intuition. They are **not** claims that these architectures "
-        "are mathematically identical. This app does not implement, "
-        "reproduce, or train any part of BDH."
-    )
+    st.write("So where does BDH fit?")
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.markdown("#### Standard Attention")
-        st.markdown("**Tokens → Pairwise interactions**")
-        st.caption(
-            "Every pair of tokens is compared explicitly via QKᵀ, "
-            "producing an N×N matrix (Tab 1 & Tab 2)."
-        )
+        st.markdown("**Standard Attention**")
+        st.write("Tokens → pairwise interactions")
     with c2:
-        st.markdown("#### Linear-Attention-Style")
-        st.markdown("**Tokens → Accumulated state**")
-        st.caption(
-            "Tokens are folded one-by-one into a small, fixed-size "
-            "state instead of being compared pairwise (Tab 2)."
-        )
+        st.markdown("**Linear-attention-style**")
+        st.write("Tokens → accumulated state")
     with c3:
-        st.markdown("#### BDH / BDH-CQ (Pathway)")
-        st.markdown("**Tokens/demonstrations → Synaptic/state updates**")
-        st.caption(
-            "A brain-inspired, post-Transformer architecture where "
-            "contextual information is accumulated through "
-            "synaptic/state-oriented updates. BDH-CQ additionally "
-            "introduces a compressed recurrent/synaptic state."
-        )
+        st.markdown("**BDH / BDH-CQ**")
+        st.write("Context → synaptic/state updates")
 
-    st.divider()
-
-    st.markdown(
-        """
-        ### What's actually similar?
-        - All three ideas move away from relying *only* on explicit,
-          pairwise token comparison.
-        - Both the linear-attention toy demo and BDH rely on some form of
-          **accumulated / stateful representation** rather than
-          materializing every pairwise interaction.
-
-        ### What's NOT the same — please read before your demo/pitch
-        - This app's linear-attention demo is a **simplified educational
-          toy**. It is **not** BDH, and it does not claim to be.
-        - BDH is a distinct, brain-inspired architecture from Pathway with
-          its own design. **We are not claiming "BDH = linear attention."**
-        - **We are not claiming "BDH is a State Space Model (SSM)"** —
-          that claim is only appropriate if Pathway's own materials state
-          it directly, which this app does not assume.
-        - This app does not implement, reproduce, or train any part of
-          BDH or BDH-CQ.
-        """
+    st.write(
+        "These are related ideas about handling context through "
+        "different forms of computation and state, rather than only "
+        "comparing every token pair explicitly."
     )
+
+    with st.expander("Want more detail?"):
+        st.markdown(
+            """
+            Pathway's Dragon Hatchling (BDH) is a brain-inspired,
+            post-Transformer architecture where contextual information is
+            accumulated through synaptic/state-oriented updates.
+            BDH-CQ additionally introduces a compressed recurrent/synaptic
+            state.
+
+            These connections are **conceptual analogies**, not claims of
+            mathematical equivalence:
+
+            - This app's linear-attention demo is a simplified educational
+              toy — it is **not** BDH.
+            - We are **not** claiming "BDH = linear attention."
+            - We are **not** claiming "BDH is a State Space Model (SSM)."
+            - This app does not implement, reproduce, or train any part of
+              BDH or BDH-CQ.
+            """
+        )
 
 # -------------------------------------------------------------------------
 # TAB 4 — Trade-offs
 # -------------------------------------------------------------------------
 with tab4:
-    st.header("Trade-offs: what is gained, and what is lost?")
+    st.write("What do we gain, and what do we lose?")
 
     col1, col2 = st.columns(2)
     with col1:
-        st.success("**Advantages**")
+        st.markdown("**Gain**")
         st.markdown(
             """
-            - Avoids explicitly building the full N×N attention matrix
-            - Can support efficient, state-based (streaming) processing
-            - Attractive for long sequences, since the state's *size*
-              doesn't grow with N
+            - Fewer explicit pairwise interactions
+            - Useful for long sequences
+            - State can be updated incrementally
             """
         )
     with col2:
-        st.warning("**Trade-offs**")
+        st.markdown("**Trade-off**")
         st.markdown(
             """
-            - Not identical to standard softmax attention — the math is
-              genuinely different, not just a faster version of the same thing
-            - Retrieval behavior can differ; reproducing very sharp,
-              highly selective attention patterns can be harder
-            - Exact complexity depends on the specific formulation and
-              on the embedding dimension, not just on N
-            - Theoretical complexity ≠ measured wall-clock performance
-              on real hardware
+            - Not identical to standard softmax attention
+            - Retrieval behavior can differ
+            - Exact efficiency depends on the formulation
+            - Theoretical scaling ≠ real-world runtime
             """
         )
 
-    st.divider()
-    st.markdown("### A precise way to think about complexity")
-    st.markdown(
-        """
-        | Quantity | Standard Attention | Linear-Attention-Style (this app) |
-        |---|---|---|
-        | Pairwise interactions considered | O(N²) | Not materialized pairwise |
-        | Attention matrix storage | O(N²) | Not required |
-        | State size | — | O(d²) — depends on embedding dim **d**, not on N |
-        | Compute (this app's formulation) | O(N² · d) | O(N · d²) |
-        """
-    )
-    st.info(
-        "📌 **Important caveat:** the state size doesn't grow with N "
-        "*for a fixed embedding dimension d*. That is a specific, "
-        "correct claim — not the same as the overly broad claim "
-        "**\"linear attention always uses O(N) memory.\"** The real "
-        "picture depends on N, on d, and on exactly how the formulation "
-        "is implemented."
-    )
+    with st.expander("Want more detail?"):
+        st.markdown(
+            """
+            | Quantity | Standard Attention | Linear-Attention-Style (this app) |
+            |---|---|---|
+            | Pairwise interactions considered | O(N²) | Not materialized pairwise |
+            | Attention matrix storage | O(N²) | Not required |
+            | State size | — | O(d²) — depends on embedding dim **d**, not on N |
+            | Compute (this app's formulation) | O(N² · d) | O(N · d²) |
+
+            The state size doesn't grow with N *for a fixed embedding
+            dimension d* — that's a specific, correct claim, not the
+            same as the broader claim "linear attention always uses
+            O(N) memory." The real picture depends on N, on d, and on
+            exactly how the formulation is implemented.
+            """
+        )
 
 st.divider()
-st.caption(
-    "Educational toy project for DataForge 2026 (Pathway Track). "
-    "All computations use fixed random seeds for full reproducibility."
-)
+st.caption("Seed fixed at 42 for reproducibility.")
