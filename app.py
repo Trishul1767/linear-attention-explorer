@@ -345,14 +345,26 @@ with tab3:
         "comparing every token pair explicitly."
     )
 
+    st.markdown("### A concrete BDH-CQ memory update")
+    st.markdown(
+        "The published BDH-CQ paper describes its high-level contextual memory update as:"
+    )
+    st.latex(r"S_t = U_\theta(S_{t-1}, D_t)")
+    st.markdown(
+        "Here, `D_t` is the current demonstration and `S_t` is the updated recurrent "
+        "memory. The update function is part of the published architecture; this app "
+        "does **not** implement `U_θ` or reproduce the BDH-CQ model."
+    )
+    st.caption("Source: Engdahl et al., *BDH-CQ: In-Context Learning with Recurrent Latent Reasoning* (2026), Eq. 1.")
+
     with st.expander("Want more detail?"):
         st.markdown(
             """
             Pathway's Dragon Hatchling (BDH) is a brain-inspired,
             post-Transformer architecture where contextual information is
             accumulated through synaptic/state-oriented updates.
-            BDH-CQ additionally introduces a compressed recurrent/synaptic
-            state.
+            BDH-CQ additionally uses evolving recurrent memory and latent
+            reasoning; its paper describes the high-level memory update shown above.
 
             These connections are **conceptual analogies**, not claims of
             mathematical equivalence:
